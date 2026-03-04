@@ -14,6 +14,7 @@ class Product(models.Model):
     category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True)
     def __str__(self):
         return self.title
+
 STARS = ((i, '* ' * i) for i in range(1, 6))
 class Review(models.Model):
     stars = models.IntegerField(choices=STARS, default=2)
