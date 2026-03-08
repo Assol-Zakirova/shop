@@ -39,4 +39,22 @@ class ProductWithReviewsSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ("id", "title", "description", "price", "reviews", "rating")
+
+class ProductValidateSerializer(serializers.Serializer):
+    title = serializers.CharField(required=True, min_length=1, max_length=255)
+    description = serializers.CharField(required=False, default='No text')
+    price = serializers.IntegerField()
+    category_name = serializers.CharField()
+
+class CategoryValidateSerializer(serializers.Serializer):
+    name = serializers.CharField(required=True)
+    def validate_name(self, value):
+        if value.isdigit():
+            raise serializers.ValidationError("name cannot be only numbers")
+        return value
+
+class ReviewValidateSerializer(serializers.Serializer):
+    stars = serializers.IntegerField()
+    text = serializers.CharField(required=False)
+    product_name = serializers.CharField()
+
