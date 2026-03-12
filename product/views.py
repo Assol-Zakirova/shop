@@ -2,11 +2,16 @@ from django.shortcuts import render
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import CategoryListSerializer, CategoryDetailSerializer, ProductListSerializer, ProductDetailSerializer, ReviewListSerializer, ReviewDetailSerializer, ProductWithReviewsSerializer, ProductWithReviewsSerializer, ProductValidateSerializer, CategoryValidateSerializer, ReviewValidateSerializer
-from .models import Category, Product, Review
+from .serializers import CategoryListSerializer, CategoryDetailSerializer, ProductListSerializer, ProductDetailSerializer, ReviewListSerializer, ReviewDetailSerializer, ProductWithReviewsSerializer, ProductWithReviewsSerializer, ProductValidateSerializer, CategoryValidateSerializer, ReviewValidateSerializer, RegisterSerializer, ConfirmUserSerializer, LoginSerializer
+from .models import Category, Product, Review, UserConfirmation
 from django.db.models import Avg
 from django.db.models import Count
 from django.db import transaction
+from rest_framework.authtoken.models import Token
+from django.contrib.auth.models import User
+import random
+from django.contrib.auth import authenticate
+
 # Create your views here.
 @api_view(['GET', "POST"])
 def categories_list_api_view(request):
@@ -155,3 +160,88 @@ def products_reviews_list_api_view(request):
     )
     data = ProductWithReviewsSerializer(products, many=True).data
     return Response(data)
+def generate_confirmation_code():
+    return str(random.randint(100000, 999999))
+
+
+@api_view(['POST'])
+def register_view(request):
+    serializer = RegisterSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    username = serializer.validated_data['username']
+    password = serializer.validated_data['password']
+
+    user = User.objects.create_user(
+        username=username,
+        password=password,
+        is_active=False
+    )
+
+    code = generate_confirmation_code()
+
+    UserConfirmation.objects.create(
+        user=user,
+        code=code
+    )
+
+    return Response({
+        "message": "User created",
+        "confirmation_code": code
+    }, status=status.HTTP_201_CREATED)
+
+@api_view(['POST'])
+def confirm_user_view(request):
+    serializer = ConfirmUserSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    username = serializer.validated_data['username']
+    code = serializer.validated_data['code']
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({"error": "User not found"}, status=404)
+
+    try:
+        confirmation = UserConfirmation.objects.get(user=user)
+    except UserConfirmation.DoesNotExist:
+        return Response({"error": "Confirmation code not found"}, status=404)
+
+    if confirmation.code != code:
+        return Response({"error": "Invalid code"}, status=400)
+
+    user.is_active = True
+    user.save()
+
+    confirmation.delete()
+
+    token, _ = Token.objects.get_or_create(user=user)
+
+    return Response({
+        "message": "User confirmed successfully",
+        "token": token.key
+    })
+
+@api_view(['POST'])
+def login_view(request):
+    serializer = LoginSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    username = serializer.validated_data['username']
+    password = serializer.validated_data['password']
+
+    user = authenticate(username=username, password=password)
+
+    if user is None:
+        return Response(
+            {"error": "Invalid credentials or inactive user"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    token, _ = Token.objects.get_or_create(user=user)
+
+    return Response({
+        "message": "Login successful",
+        "token": token.key
+    })

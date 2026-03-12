@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Category, Product, Review
-
+from django.contrib.auth.models import User
 class CategoryListSerializer(serializers.ModelSerializer):
     products_count = serializers.IntegerField(read_only=True)
     class Meta:
@@ -57,4 +57,26 @@ class ReviewValidateSerializer(serializers.Serializer):
     stars = serializers.IntegerField()
     text = serializers.CharField(required=False)
     product_name = serializers.CharField()
+
+class RegisterSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+    password_confirm = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password_confirm']:
+            raise serializers.ValidationError("Passwords do not match")
+
+        if User.objects.filter(username=attrs['username']).exists():
+            raise serializers.ValidationError("User already exists")
+
+        return attrs
+    
+class ConfirmUserSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    code = serializers.CharField(max_length=6)
+
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
 
