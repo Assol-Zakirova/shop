@@ -245,3 +245,4 @@ def login_view(request):
         "message": "Login successful",
         "token": token.key
     })
+
