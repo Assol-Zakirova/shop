@@ -59,8 +59,10 @@ class CategoryValidateSerializer(serializers.Serializer):
 class ReviewValidateSerializer(serializers.Serializer):
     stars = serializers.IntegerField()
     text = serializers.CharField(required=False)
-    product_name = serializers.CharField()
-
+    product_name = serializers.CharField(write_only=True)
+    def create(self, validated_data):
+        validated_data.pop('product_name', None)
+        return Review.objects.create(**validated_data)
 class RegisterSerializer(serializers.Serializer):
     email = serializers.CharField()
     password = serializers.CharField(write_only=True)

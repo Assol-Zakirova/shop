@@ -13,7 +13,7 @@ from django.contrib.auth import authenticate
 from product.serializers import CategoryListSerializer, CategoryValidateSerializer, CategoryDetailSerializer, ProductListSerializer, ProductValidateSerializer, ProductDetailSerializer, ReviewListSerializer, ReviewDetailSerializer, ReviewValidateSerializer, RegisterSerializer, ConfirmUserSerializer, LoginSerializer
 from django.shortcuts import get_object_or_404
 from rest_framework import generics
-
+from common.permissions import IsOwner, IsAnonymous, CanEditWithin15Minutes, IsModerator
 
 class CategoriesListApiView(generics.ListCreateAPIView):
     queryset = Category.objects.annotate(products_count=Count("product"))
@@ -33,12 +33,12 @@ class CategoriesDetailApiView(generics.RetrieveUpdateDestroyAPIView):
 
 class ProductsListApiView(generics.ListCreateAPIView):
     queryset = Product.objects.all()
-
+    permission_classes = [IsAnonymous | IsModerator]
     def get_serializer_class(self):
         if self.request.method == "POST":
             return ProductValidateSerializer
         return ProductListSerializer
-
+     
     def perform_create(self, serializer):
         category_name = self.request.data.get('category_name')
 
@@ -49,7 +49,7 @@ class ProductsListApiView(generics.ListCreateAPIView):
 class ProductsDetailApiView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.all()
     lookup_field = 'id'
-
+    permission_classes = [IsAnonymous | (IsOwner & CanEditWithin15Minutes) | IsModerator]
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
             return ProductValidateSerializer
