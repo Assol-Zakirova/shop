@@ -12,8 +12,14 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate
 from product.serializers import CategoryListSerializer, CategoryValidateSerializer, CategoryDetailSerializer, ProductListSerializer, ProductValidateSerializer, ProductDetailSerializer, ReviewListSerializer, ReviewDetailSerializer, ReviewValidateSerializer, RegisterSerializer, ConfirmUserSerializer, LoginSerializer
 from django.shortcuts import get_object_or_404
+from common.validators import ageValidator
 from rest_framework import generics
+from product.serializers import CustomTokenObtainPairSerializer
 from common.permissions import IsOwner, IsAnonymous, CanEditWithin15Minutes, IsModerator
+from rest_framework_simplejwt.views import TokenObtainPairView
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
 
 class CategoriesListApiView(generics.ListCreateAPIView):
     queryset = Category.objects.annotate(products_count=Count("product"))
@@ -40,12 +46,26 @@ class ProductsListApiView(generics.ListCreateAPIView):
         return ProductListSerializer
      
     def perform_create(self, serializer):
+        if not self.request.user.is_authenticated:
+            raise PermissionError("Authentication required to create a product.")
+        
+        ageValidator(self.request)
+
         category_name = self.request.data.get('category_name')
 
         category, _ = Category.objects.get_or_create(name=category_name)
+        owner_id = None
+    
+        if self.request.auth:
+            owner_id = self.request.auth.get('user_id')
 
+        if not owner_id and self.request.user and self.request.user.is_authenticated:
+            owner_id = self.request.user.id
+
+        owner = CustomUser.objects.filter(id=owner_id).first() if owner_id else None
         with transaction.atomic():
-            serializer.save(category=category)
+            serializer.save(category=category, owner=owner)
+            
 class ProductsDetailApiView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.all()
     lookup_field = 'id'

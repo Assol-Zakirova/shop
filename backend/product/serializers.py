@@ -2,6 +2,17 @@ from users.models import CustomUser
 from rest_framework import serializers
 from .models import Category, Product, Review
 from django.contrib.auth.models import User
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    @classmethod
+    def get_token(cls, user):
+        token = super().get_token(user)
+        token["email"] = user.email
+        token["birthdate"] = user.birthdate.isoformat() if user.birthdate else None
+        return token
+
+
 class CategoryListSerializer(serializers.ModelSerializer):
     products_count = serializers.IntegerField(read_only=True)
     class Meta:

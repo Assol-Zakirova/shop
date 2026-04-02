@@ -53,6 +53,7 @@ def categories_detail_api_view(request, id):
     elif request.method == 'DELETE':
         category.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
 @api_view(['GET', 'POST'])
 def products_list_api_view(request):
     if request.method == 'GET':
@@ -106,6 +107,7 @@ def products_detail_api_view(request, id):
     elif request.method == 'DELETE':
         product.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
 @api_view(["GET", 'POST'])
 def reviews_list_api_view(request):
     if request.method == 'GET':
