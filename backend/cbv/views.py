@@ -17,7 +17,23 @@ from rest_framework import generics
 from product.serializers import CustomTokenObtainPairSerializer
 from common.permissions import IsOwner, IsAnonymous, CanEditWithin15Minutes, IsModerator
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework.pagination import PageNumberPagination
+from collections import OrderedDict
+from django.core.cache import cache
+PAGE_SIZE = 5
 
+
+class CustomPagination(PageNumberPagination):
+    def get_paginated_response(self, data):
+        return Response(OrderedDict([
+            ('total', self.page.paginator.count),
+            ('next', self.get_next_link()),
+            ('previous', self.get_previous_link()),
+            ('results', data)
+        ]))
+
+    def get_page_size(self, request):
+        return PAGE_SIZE
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
@@ -40,6 +56,7 @@ class CategoriesDetailApiView(generics.RetrieveUpdateDestroyAPIView):
 class ProductsListApiView(generics.ListCreateAPIView):
     queryset = Product.objects.all()
     permission_classes = [IsAnonymous | IsModerator]
+    pagination_class = CustomPagination
     def get_serializer_class(self):
         if self.request.method == "POST":
             return ProductValidateSerializer
@@ -65,6 +82,16 @@ class ProductsListApiView(generics.ListCreateAPIView):
         owner = CustomUser.objects.filter(id=owner_id).first() if owner_id else None
         with transaction.atomic():
             serializer.save(category=category, owner=owner)
+    def get(self, request, *args, **kwargs):
+        cached_data = cache.get("porduct_list")
+        if cached_data:
+            print("REDIS")
+            return Response(data=cached_data, status=status.HTTP_200_OK)
+        response = super().get(self, request, *args, **kwargs)
+        print("POSTGRES")
+        if response.data.get("total", 0) > 0:
+            cache.set("porduct_list", response.data, 300)
+        return response
             
 class ProductsDetailApiView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.all()
@@ -127,21 +154,20 @@ class RegisterApiView(generics.CreateAPIView):
 
             code = generate_confirmation_code()
 
-            UserConfirmation.objects.create(
-                user=user,
-                code=code
-            )
+            key = f"confirmation_code:{email}"
+            cache.set(key, code, 300)  
 
-        headers = self.get_success_headers(serializer.data)
         return Response(
             {
                 "message": "User created",
                 "confirmation_code": code
             },
-            status=status.HTTP_201_CREATED,
-            headers=headers
+            status=status.HTTP_201_CREATED
         )
         
+from django.core.cache import cache
+from rest_framework.authtoken.models import Token
+
 class ConfirmUserApiView(generics.GenericAPIView):
     serializer_class = ConfirmUserSerializer
 
@@ -156,17 +182,20 @@ class ConfirmUserApiView(generics.GenericAPIView):
         if not user:
             return Response({"error": "User not found"}, status=404)
 
-        confirmation = UserConfirmation.objects.filter(user=user).first()
-        if not confirmation:
-            return Response({"error": "Confirmation code not found"}, status=404)
+        key = f"confirmation_code:{email}"
 
-        if confirmation.code != code:
+        stored_code = cache.get(key)
+
+        if not stored_code:
+            return Response({"error": "Code expired or not found"}, status=400)
+
+        if stored_code != code:
             return Response({"error": "Invalid code"}, status=400)
 
         user.is_active = True
         user.save(update_fields=['is_active'])
 
-        confirmation.delete()
+        cache.delete(key)
 
         token, _ = Token.objects.get_or_create(user=user)
 
