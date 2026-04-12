@@ -156,6 +156,11 @@ class RegisterApiView(generics.CreateAPIView):
 
             key = f"confirmation_code:{email}"
             cache.set(key, code, 300)  
+            from users.tasks import send_welcome_email
+            send_welcome_email.delay(email)
+            from users.tasks import send_email
+            send_email.delay(email, code)
+
 
         return Response(
             {
@@ -225,6 +230,9 @@ class LoginApiView(generics.GenericAPIView):
             )
 
         token, _ = Token.objects.get_or_create(user=user)
+
+        from users.tasks import log_user_login
+        log_user_login.delay(email)
 
         return Response(
             {
